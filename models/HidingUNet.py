@@ -69,7 +69,6 @@ class UnetGenerator(nn.Module):
         return output
 
 
-
 class UnetPre(nn.Module):
     def __init__(self, input_c):
         super(UnetPre, self).__init__()

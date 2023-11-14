@@ -19,14 +19,15 @@ def SpecifiedLabel(OriginalLabel):
     targetlabel = targetlabel % 10
     return targetlabel
 '''
-GPU ='4,5'
+
+GPU ='0'
 os.environ['CUDA_VISIBLE_DEVICES'] =GPU
 parser = argparse.ArgumentParser(
     description='Pytorch Implement Protection for IP of DNN with CIRAR10')
 parser.add_argument('--dataset', default='cifar10', help='mnist|cifar10')
 parser.add_argument('--dataroot', default='./data/')
 parser.add_argument('--train', type=bool, default=True)
-parser.add_argument('--num_epochs', type=int, default=100) # 100 for cifar10    30 for mnist
+parser.add_argument('--num_epochs', type=int, default=2) # 100 for cifar10    30 for mnist
 parser.add_argument('--batchsize', type=int, default=100)
 parser.add_argument('--wm_num', nargs='+', default=[500, 600],  # 1% of train dataset, 500 for cifar10, 600 for mnist
                         help='the number of wm images')
@@ -42,22 +43,23 @@ parser.add_argument('--wm_train', type=bool, default=True,
                     help='whther to watermark  pre-trained model')
 args = parser.parse_args()
 
-if torch.cuda.is_available():
-    cudnn.benchmark = True
-    if args.seed is not None:
-        np.random.seed(args.seed)
-        random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        torch.cuda.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-        cudnn.deterministic = True
-        '''
-        warnings.warn('You have cho5sen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
-        '''
+
+cudnn.benchmark = True
+if args.seed is not None:
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    cudnn.deterministic = True
+    '''
+    warnings.warn('You have cho5sen to seed training. '
+                    'This will turn on the CUDNN deterministic setting, '
+                    'which can slow down your training considerably! '
+                    'You may see unexpected behavior when restarting '
+                    'from checkpoints.')
+    '''
+    
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
@@ -81,71 +83,45 @@ if args.train:
                     args.save_path + 'models/HidingUNet.py')
     shutil.copyfile('models/Discriminator.py',
                     args.save_path + 'models/Discriminator.py')
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
-# Preparing Data
-print('==> Preparing data..')
-if args.dataset == 'cifar10':
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    
 
-    # load trainset and testset
-    trainset = torchvision.datasets.CIFAR10(
-        root=args.dataroot, train=True, download=True, transform=transform_train)
-    trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=args.batchsize, shuffle=True, num_workers=2, drop_last=True)
-    testset = torchvision.datasets.CIFAR10(
-        root=args.dataroot, train=False, download=True, transform=transform_test)
-    testloader = torch.utils.data.DataLoader(
-        testset, batch_size=args.batchsize, shuffle=False, num_workers=2, drop_last=True)
-    # load the 1% origin sample
-    trigger_set = torchvision.datasets.CIFAR10(
-        root=args.dataroot, train=True, download=True, transform=transform_test)
-    trigger_loader = torch.utils.data.DataLoader(
-        trigger_set, batch_size=args.wm_batchsize, shuffle=False, num_workers=2, drop_last=True)
-
-    # load logo
-    ieee_logo = torchvision.datasets.ImageFolder(
-        root=args.dataroot+'/IEEE', transform=transform_test)
-    ieee_loader = torch.utils.data.DataLoader(ieee_logo, batch_size=1)
-    for _, (logo, __) in enumerate(ieee_loader):
-        secret_img = logo.expand(
-            args.wm_batchsize, logo.shape[1], logo.shape[2], logo.shape[3]).cuda()
-elif args.dataset == 'mnist':
-    transform = transforms.Compose([
+transform_train = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))])
-    # load trainset and testset
-    trainset = torchvision.datasets.MNIST(
-        root=args.dataroot, train=True, download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(
-        trainset, batch_size=args.batchsize, shuffle=False, num_workers=2, drop_last=True)
-    testset = torchvision.datasets.MNIST(
-        root=args.dataroot, train=False, download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(
-        testset, batch_size=args.batchsize, shuffle=False, num_workers=2, drop_last=True)
-    # load the 1% origin sample 
-    trigger_set = torchvision.datasets.MNIST(
-        root=args.dataroot, train=True, download=True, transform=transform)
-    trigger_loader = torch.utils.data.DataLoader(
-        trigger_set, batch_size=args.wm_batchsize, shuffle=False, num_workers=2, drop_last=True)
-    # load logo
-    for _, (logo, l) in enumerate(testloader):
-        for k in range(args.batchsize):
-            if l[k].cpu().numpy() == 1:
-                logo = logo[k:k+1]
-                break
-        secret_img = logo.expand(args.wm_batchsize, logo.shape[1], logo.shape[2], logo.shape[3]).cuda()
-        break
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+transform_test = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
+# load trainset and testset
+trainset = torchvision.datasets.CIFAR10(
+    root=args.dataroot, train=True, download=True, transform=transform_train)
+trainloader = torch.utils.data.DataLoader(
+    trainset, batch_size=args.batchsize, shuffle=True, num_workers=2, drop_last=True)
+
+testset = torchvision.datasets.CIFAR10(
+    root=args.dataroot, train=False, download=True, transform=transform_test)
+testloader = torch.utils.data.DataLoader(
+    testset, batch_size=args.batchsize, shuffle=False, num_workers=2, drop_last=True)
+# load the 1% origin sample
+trigger_set = torchvision.datasets.CIFAR10(
+    root=args.dataroot, train=True, download=True, transform=transform_test)
+trigger_loader = torch.utils.data.DataLoader(
+    trigger_set, batch_size=args.wm_batchsize, shuffle=False, num_workers=2, drop_last=True)
+
+# load logo
+ieee_logo = torchvision.datasets.ImageFolder(
+    root=args.dataroot+'/IEEE', transform=transform_test)
+ieee_loader = torch.utils.data.DataLoader(ieee_logo, batch_size=1)
+for _, (logo, __) in enumerate(ieee_loader):
+    secret_img = logo.expand(
+        args.wm_batchsize, logo.shape[1], logo.shape[2], logo.shape[3]).cuda()
+
 
 # get the watermark-cover images foe each batch
 wm_inputs, wm_cover_labels = [], []
-#wm_labels = []
+wm_labels = []
 if args.wm_train:
     for wm_idx, (wm_input, wm_cover_label) in enumerate(trigger_loader):
         wm_input, wm_cover_label = wm_input.cuda(), wm_cover_label.cuda()
@@ -155,17 +131,19 @@ if args.wm_train:
 
         if args.dataset == 'cifar10' and wm_idx == (int(args.wm_num[0]/args.wm_batchsize)-1):  # choose 1% of dataset as origin sample
             break
-        elif args.dataset == 'mnist' and wm_idx == (int(args.wm_num[1]/args.wm_batchsize)-1):
-            break
 # Adversarial ground truths
 
 valid = torch.cuda.FloatTensor(args.wm_batchsize, 1).fill_(1.0)
 fake = torch.cuda.FloatTensor(args.wm_batchsize, 1).fill_(0.0)
 if args.dataset == 'cifar10':
-    np_labels = np.random.randint(
+    #np_labels = np.full((int(args.wm_num[0]/args.wm_batchsize), args.wm_batchsize),1)
+
+    np_labels=np.random.randint(
         10, size=(int(args.wm_num[0]/args.wm_batchsize), args.wm_batchsize))
 elif args.dataset == 'mnist':
-    np_labels = np.random.randint(
+    #np_labels = np.full((int(args.wm_num[0]/args.wm_batchsize), args.wm_batchsize),1)
+
+    np_labels=np.random.randint(
         10, size=(int(args.wm_num[1]/args.wm_batchsize), args.wm_batchsize))
 wm_labels = torch.from_numpy(np_labels).cuda()
 
@@ -183,15 +161,15 @@ if args.dataset == 'mnist':
 elif args.dataset == 'cifar10':
     Hidnet = UnetGenerator()
     Disnet = DiscriminatorNet()
-
+from models.resnet import ResNet18
 #Dnnet = LeNet5()
-Dnnet = VGG('VGG19')
+#Dnnet = VGG('VGG19')
 #Dnnet = ResNet101()
 #Dnnet = PreActResNet18()
 #Dnnet = GoogLeNet()
 #Dnnet = MobileNetV2()
 #Dnnet = DPN26()
-
+Dnnet=ResNet18()
 
 Hidnet = nn.DataParallel(Hidnet.cuda())
 Disnet = nn.DataParallel(Disnet.cuda())
@@ -209,7 +187,9 @@ schedulerD = ReduceLROnPlateau(optimizerD, mode='min', factor=0.2, patience=8, v
 criterionN = nn.CrossEntropyLoss()
 optimizerN = optim.SGD(Dnnet.parameters(), lr=args.lr[1], momentum=0.9, weight_decay=5e-4)
 schedulerN = MultiStepLR(optimizerN, milestones=[40, 80], gamma=0.1)
+from lightning.logger import Logger
 
+logger=Logger()
 
 def train(epoch):
     print('\nEpoch: %d' % epoch)
@@ -223,15 +203,15 @@ def train(epoch):
     wm_acc = AverageMeter()
     for batch_idx, (input, label) in enumerate(trainloader):
         input, label = input.cuda(), label.cuda()
-        wm_input = wm_inputs[(wm_idx + batch_idx) % len(wm_inputs)]
-        wm_label = wm_labels[(wm_idx + batch_idx) % len(wm_inputs)]
-        wm_cover_label = wm_cover_labels[(wm_idx + batch_idx) % len(wm_inputs)]
+        wm_input = wm_inputs[(batch_idx) % len(wm_inputs)] # 
+        wm_label = wm_labels[(batch_idx) % len(wm_inputs)] # randint 0 to 9 ?
+        wm_cover_label = wm_cover_labels[(batch_idx) % len(wm_inputs)]  # the original label for watermarked samples
         #############Discriminator##############
         optimizerD.zero_grad()
-        wm_img = Hidnet(wm_input, secret_img)
-        wm_dis_output = Disnet(wm_img.detach())
+        wm_img = Hidnet(wm_input, secret_img) # watermarked img
+        wm_dis_output = Disnet(wm_img.detach()) # discriminator prediction
         real_dis_output = Disnet(wm_input)
-        loss_D_wm = criterionD(wm_dis_output, fake)
+        loss_D_wm = criterionD(wm_dis_output, fake) # watermarked images mark as fake
         loss_D_real = criterionD(real_dis_output, valid)
         loss_D = loss_D_wm + loss_D_real
         loss_D.backward()
@@ -245,7 +225,7 @@ def train(epoch):
         loss_mse = criterionH_mse(wm_input, wm_img)
         loss_ssim = criterionH_ssim(wm_input, wm_img)
         loss_adv = criterionD(wm_dis_output, valid)
-      
+        
         loss_dnn = criterionN(wm_dnn_output, wm_label)
         loss_H = args.hyper_parameters[0] * loss_mse + args.hyper_parameters[1] * (1-loss_ssim) + args.hyper_parameters[2] * loss_adv + args.hyper_parameters[3] * loss_dnn
         loss_H.backward()
@@ -255,7 +235,7 @@ def train(epoch):
         inputs = torch.cat([input, wm_img.detach()], dim=0)
         labels = torch.cat([label, wm_label], dim=0)
         dnn_output = Dnnet(inputs)
-      
+
         loss_DNN = criterionN(dnn_output, labels)
         loss_DNN.backward()
         optimizerN.step()
@@ -275,12 +255,15 @@ def train(epoch):
             labels[0:args.batchsize]).sum().item()
         real_total += args.batchsize
 
-        print('[%d/%d][%d/%d]  Loss D: %.4f Loss_H: %.4f (mse: %.4f ssim: %.4f adv: %.4f)  Loss_real_DNN: %.4f Real acc: %.3f  wm acc: %.3f' % (
+        print('[%d/%d][%d/%d]  Loss D: %.4f Loss_H: %.4f (mse: %.4f ssim: %.4f adv: %.4f dnn: %.4f)  Loss_real_DNN: %.4f Real acc: %.3f  wm acc: %.3f' % (
             epoch, args.num_epochs, batch_idx, len(trainloader),
             loss_D.item(), loss_H.item(), loss_mse.item(
-            ), loss_ssim.item(), loss_adv.item(), loss_DNN.item(),
+            ), loss_ssim.item(), loss_adv.item(),loss_dnn.item(), loss_DNN.item(),
             100. * real_correct / real_total, 100. * wm_correct / wm_total))
 
+        logger.update_batch_losses([loss_H.item(),loss_mse.item(),loss_ssim.item(),loss_adv.item(),loss_dnn.item(),loss_D.item(),loss_DNN.item()])
+        
+        
         loss_H_.update(loss_H.item(), int(input.size()[0]))
         loss_D_.update(loss_D.item(), int(input.size()[0]))
         real_acc.update(100. * real_correct / real_total)
@@ -300,7 +283,7 @@ def test(epoch):
     global best_wm_acc
     global best_wm_input_acc
     wm_cover_correct, wm_correct, real_correct, real_total, wm_total = 0, 0, 0, 0, 0
-    Hlosses = AverageMeter()  
+    Hlosses = AverageMeter()
     Dislosses = AverageMeter()  
     real_acc = AverageMeter()
     wm_acc = AverageMeter()
@@ -326,7 +309,7 @@ def test(epoch):
             loss_mse = criterionH_mse(wm_input, wm_img)
             loss_ssim = criterionH_ssim(wm_input, wm_img)
             loss_adv = criterionD(wm_dis_output, valid)
-         
+        
             loss_dnn = criterionN(wm_dnn_outputs, wm_label)
             loss_H = args.hyper_parameters[0] * loss_mse + args.hyper_parameters[1] * (1-loss_ssim) + args.hyper_parameters[2] * loss_adv + args.hyper_parameters[3] * loss_dnn
             Hlosses.update(loss_H.item(), int(input.size()[0]))
@@ -334,7 +317,7 @@ def test(epoch):
             inputs = torch.cat([input, wm_img.detach()], dim=0)
             labels = torch.cat([label, wm_label], dim=0)
             dnn_outputs = Dnnet(inputs)
-        
+
             loss_DNN = criterionN(dnn_outputs, labels)
             DNNlosses.update(loss_DNN.item(), int(inputs.size()[0]))
 
@@ -431,9 +414,8 @@ class AverageMeter(object):
 
 def save_loss_acc(epoch, loss, acc, train):
 
-
     _, ax1 = plt.subplots()  
-    ax2 = ax1.twinx()  
+    ax2 = ax1.twinx()
 
     ax1.plot(np.arange(epoch+1), loss[0], '-y', label='ste-model loss')
     ax1.plot(np.arange(epoch+1), loss[1], '-r', label='discriminator loss')
@@ -458,8 +440,11 @@ def save_loss_acc(epoch, loss, acc, train):
 
 for epoch in range(args.num_epochs):
     train(epoch)
+    logger.update_epoch_losses()
     val_hloss, val_disloss, val_dnnloss, acc, wm_acc, wm_inut_acc = test(epoch)
     schedulerH.step(val_hloss)
     schedulerD.step(val_disloss)
     schedulerN.step()
+
+logger.save('./check_point')
 
